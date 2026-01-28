@@ -11,22 +11,41 @@ APP_KEY="${TRANSPORT_APP_KEY:-d19714141e23df4510b1af56b9a0f3af}"
 
 echo "🔄 Generating dashboard..."
 
-# --- TRAINS: Glasgow → Edinburgh ---
-TRAINS_GLQ=$(curl -sL "https://transportapi.com/v3/uk/train/station/GLQ/live.json?app_id=${APP_ID}&app_key=${APP_KEY}&destination=EDB&train_status=passenger" | jq -r '
-  .departures.all 
-  | map(select(.platform != "9" and .platform != "8"))
-  | .[:3]
-  | map("<div class=\"train\"><span class=\"time\">\(.aimed_departure_time)</span><span class=\"platform\">Plat \(.platform)</span><span class=\"status ok\">✓</span></div>")
-  | join("")
-')
+# --- TRAINS: Glasgow → Edinburgh (with arrival platforms) ---
+TRAINS_GLQ=""
+GLQ_DEPS=$(curl -sL "https://transportapi.com/v3/uk/train/station/GLQ/live.json?app_id=${APP_ID}&app_key=${APP_KEY}&destination=EDB&train_status=passenger")
+for uid in $(echo "$GLQ_DEPS" | jq -r '.departures.all | map(select(.platform != "9" and .platform != "8")) | .[:3] | .[].train_uid'); do
+  DEP_INFO=$(echo "$GLQ_DEPS" | jq -r --arg uid "$uid" '.departures.all[] | select(.train_uid == $uid) | "\(.aimed_departure_time)|\(.platform)"')
+  DEP_TIME=$(echo "$DEP_INFO" | cut -d'|' -f1)
+  DEP_PLAT=$(echo "$DEP_INFO" | cut -d'|' -f2)
+  
+  SVC=$(curl -sL "https://transportapi.com/v3/uk/train/service_timetables/${uid}:$(date +%Y-%m-%d).json?app_id=${APP_ID}&app_key=${APP_KEY}&live=true")
+  ARR_PLAT=$(echo "$SVC" | jq -r '.stops[] | select(.station_code == "EDB") | .platform')
+  ARR_TIME=$(echo "$SVC" | jq -r '.stops[] | select(.station_code == "EDB") | .aimed_arrival_time')
+  
+  TRAINS_GLQ+="<div class=\"train\"><span class=\"time\">${DEP_TIME}</span><span class=\"platform\">Plat ${DEP_PLAT} → ${ARR_PLAT}</span><span class=\"arr\">arr ${ARR_TIME}</span></div>"
+done
 
-# --- TRAINS: Edinburgh → Glasgow ---
-TRAINS_EDB=$(curl -sL "https://transportapi.com/v3/uk/train/station/EDB/live.json?app_id=${APP_ID}&app_key=${APP_KEY}&destination=GLQ&train_status=passenger" | jq -r '
-  .departures.all 
-  | .[:3]
-  | map("<div class=\"train\"><span class=\"time\">\(.aimed_departure_time)</span><span class=\"platform\">Plat \(.platform)</span><span class=\"status ok\">✓</span></div>")
-  | join("")
-')
+# --- TRAINS: Edinburgh → Glasgow (with arrival platforms) ---
+TRAINS_EDB=""
+EDB_DEPS=$(curl -sL "https://transportapi.com/v3/uk/train/station/EDB/live.json?app_id=${APP_ID}&app_key=${APP_KEY}&destination=GLQ&train_status=passenger")
+for uid in $(echo "$EDB_DEPS" | jq -r '.departures.all | .[:6] | .[].train_uid'); do
+  DEP_INFO=$(echo "$EDB_DEPS" | jq -r --arg uid "$uid" '.departures.all[] | select(.train_uid == $uid) | "\(.aimed_departure_time)|\(.platform)"')
+  DEP_TIME=$(echo "$DEP_INFO" | cut -d'|' -f1)
+  DEP_PLAT=$(echo "$DEP_INFO" | cut -d'|' -f2)
+  
+  SVC=$(curl -sL "https://transportapi.com/v3/uk/train/service_timetables/${uid}:$(date +%Y-%m-%d).json?app_id=${APP_ID}&app_key=${APP_KEY}&live=true")
+  ARR_PLAT=$(echo "$SVC" | jq -r '.stops[] | select(.station_code == "GLQ") | .platform')
+  ARR_TIME=$(echo "$SVC" | jq -r '.stops[] | select(.station_code == "GLQ") | .aimed_arrival_time')
+  
+  # Skip low level arrivals (platform 8 or 9)
+  [[ "$ARR_PLAT" == "8" || "$ARR_PLAT" == "9" ]] && continue
+  
+  TRAINS_EDB+="<div class=\"train\"><span class=\"time\">${DEP_TIME}</span><span class=\"platform\">Plat ${DEP_PLAT} → ${ARR_PLAT}</span><span class=\"arr\">arr ${ARR_TIME}</span></div>"
+  
+  # Limit to 3 trains
+  [[ $(echo "$TRAINS_EDB" | grep -c "train") -ge 3 ]] && break
+done
 
 # --- WEATHER (Met Office) ---
 # Glasgow: gcuvz3bch, Edinburgh: gcvwr3zrw
@@ -106,6 +125,7 @@ cat > "$OUTPUT" << HTMLEOF
     .status.ok { color: var(--green); }
     .status.delayed { color: var(--yellow); }
     .status.cancelled { color: var(--red); }
+    .train .arr { color: var(--muted); font-size: 0.85rem; }
     .weather {
       display: flex;
       align-items: center;
