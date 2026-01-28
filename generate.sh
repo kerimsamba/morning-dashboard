@@ -28,14 +28,17 @@ TRAINS_EDB=$(curl -sL "https://transportapi.com/v3/uk/train/station/EDB/live.jso
   | join("")
 ')
 
-# --- WEATHER ---
-WEATHER_GLASGOW=$(curl -s "wttr.in/Glasgow?format=%t|%C" 2>/dev/null || echo "?|?")
-WEATHER_EDINBURGH=$(curl -s "wttr.in/Edinburgh?format=%t|%C" 2>/dev/null || echo "?|?")
+# --- WEATHER (Met Office) ---
+# Glasgow: gcuvz3bch, Edinburgh: gcvwr3zrw
+GLASGOW_DATA=$(curl -sL "https://weather.metoffice.gov.uk/forecast/gcuvz3bch" | head -100)
+EDINBURGH_DATA=$(curl -sL "https://weather.metoffice.gov.uk/forecast/gcvwr3zrw" | head -100)
 
-GLASGOW_TEMP=$(echo "$WEATHER_GLASGOW" | cut -d'|' -f1)
-GLASGOW_DESC=$(echo "$WEATHER_GLASGOW" | cut -d'|' -f2)
-EDINBURGH_TEMP=$(echo "$WEATHER_EDINBURGH" | cut -d'|' -f1)
-EDINBURGH_DESC=$(echo "$WEATHER_EDINBURGH" | cut -d'|' -f2)
+# Extract first temperature from the forecast (current hour)
+GLASGOW_TEMP=$(echo "$GLASGOW_DATA" | grep -o '[0-9]\+°' | head -1 || echo "?°")
+EDINBURGH_TEMP=$(echo "$EDINBURGH_DATA" | grep -o '[0-9]\+°' | head -1 || echo "?°")
+
+GLASGOW_DESC="Met Office"
+EDINBURGH_DESC="Met Office"
 
 # --- REDDIT: AI Coding ---
 # Reddit blocks direct API calls from servers - ask me for Reddit updates instead
