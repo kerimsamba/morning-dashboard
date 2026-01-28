@@ -7,9 +7,6 @@ on:
     - cron: '55 15 * * 1-5'  # 3:55pm UTC weekdays
   workflow_dispatch:  # Allow manual trigger
 
-permissions:
-  contents: write
-
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -25,10 +22,9 @@ jobs:
           chmod +x generate.sh
           ./generate.sh
       
-      - name: Commit and push
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add index.html
-          git diff --staged --quiet || git commit -m "Update dashboard $(date '+%Y-%m-%d %H:%M')"
-          git push
+          npm i -g vercel
+          vercel --prod --token=$VERCEL_TOKEN
