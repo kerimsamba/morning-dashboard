@@ -1,0 +1,31 @@
+name: Update Dashboard
+
+on:
+  schedule:
+    # UK times (UTC - adjust +1hr during BST)
+    - cron: '0 6 * * 1-5'    # 6:00am UTC weekdays
+    - cron: '55 15 * * 1-5'  # 3:55pm UTC weekdays
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Generate dashboard
+        env:
+          TRANSPORT_APP_ID: ${{ secrets.TRANSPORT_APP_ID }}
+          TRANSPORT_APP_KEY: ${{ secrets.TRANSPORT_APP_KEY }}
+        run: |
+          chmod +x generate.sh
+          ./generate.sh
+      
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add index.html
+          git diff --staged --quiet || git commit -m "Update dashboard $(date '+%Y-%m-%d %H:%M')"
+          git push
